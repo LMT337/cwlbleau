@@ -19,6 +19,7 @@ else:
 # set working dir, results dic, date
 working_dir = os.getcwd()
 results = {}
+results['WOID'] = woid
 mm_dd_yy = datetime.datetime.now().strftime("%m%d%y")
 
 # Fucntions pull metrics from last succeeded build dir
@@ -133,19 +134,21 @@ def wgs_metrics(infile):
 
     return genome_territory
 
+
 # run genome model command to generate model info
 model_groups = subprocess.check_output(['genome', 'model', 'list', model_groups_id, "--show",
                                         "last_succeeded_build.id,name,status,last_succeeded_build.data_directory",
                                         "--style=tsv", "--nohead"]).decode('utf-8').splitlines()
 
-#header for outfile
-metrics_header = ['last_succeeded_build', 'name', 'status', 'data_directory', 'properly_paired-rate', 'PF_READS', 'FREEMIX', 'discordant_rate', 'FOP: PF_MISMATCH_RATE',
-                  'GENOME_TERRITORY', 'mapped_rate', 'SD_COVERAGE', 'HAPLOID COVERAGE', 'TOTAL_READS',
-                  'PF_READS_ALIGNED', 'SEQ_ID', 'HET_SNP_SENSITIVITY', 'MEDIAN_INSERT_SIZE', 'PCT_20X',
-                  'PF_ALIGNED_BASES', 'PCT_30X', 'PERCENT_DUPLICATION', 'PCT_ADAPTER', 'ALIGNED_READS', 'PCT_10X',
-                  'STANDARD_DEVIATION', 'MEAN_COVERAGE', 'PF_HQ_ALIGNED_Q20_BASE', 'SOP: PF_MISMATCH_RATE', 'HET_SNP_Q']
+# header for outfile
+metrics_header = ['WOID', 'last_succeeded_build', 'name', 'status', 'data_directory', 'properly_paired-rate','PF_READS',
+                  'FREEMIX', 'discordant_rate', 'FOP: PF_MISMATCH_RATE', 'GENOME_TERRITORY', 'mapped_rate',
+                  'SD_COVERAGE', 'HAPLOID COVERAGE', 'TOTAL_READS', 'PF_READS_ALIGNED', 'SEQ_ID', 'HET_SNP_SENSITIVITY',
+                  'MEDIAN_INSERT_SIZE', 'PCT_20X', 'PF_ALIGNED_BASES', 'PCT_30X', 'PERCENT_DUPLICATION', 'PCT_ADAPTER',
+                  'ALIGNED_READS', 'PCT_10X', 'STANDARD_DEVIATION', 'MEAN_COVERAGE', 'PF_HQ_ALIGNED_Q20_BASE',
+                  'SOP: PF_MISMATCH_RATE', 'HET_SNP_Q']
 
-#outfile
+# outfile
 cwd_metrics_outfile = woid + '.cwl.metrics.' + mm_dd_yy + '.tsv'
 
 # call methods to generate results
