@@ -1,9 +1,27 @@
-import os, csv
+import os, csv, subprocess, datetime, argparse
 
-os.chdir('results')
+# argument input woid
+desc_str = """
+        Program to parse cwl metrics.
+    """
+parser = argparse.ArgumentParser(description=desc_str)
+parser.add_argument("-w", type=str, help='woid')
+args = parser.parse_args()
+
+# assign woid
+if not args.w:
+    print('usage:\n~awagner/bin/python3 cwlbleau.py -w <woid>')
+    quit()
+else:
+    woid = args.w
+    model_groups_id = 'model_groups.project.id=' + woid
+
+# set working dir, results dic, date
+working_dir = os.getcwd()
 results = {}
+mm_dd_yy = datetime.datetime.now().strftime("%m%d%y")
 
-
+# Fucntions pull metrics from last succeeded build dir
 def verify_bamid(infile):
     with open(infile, 'r') as infilecsv:
         infile_reader = csv.DictReader(infilecsv, delimiter='\t')
@@ -115,14 +133,54 @@ def wgs_metrics(infile):
 
     return genome_territory
 
+# run genome model command to generate model info
+model_groups = subprocess.check_output(['genome', 'model', 'list', model_groups_id, "--show",
+                                        "last_succeeded_build.id,name,status,last_succeeded_build.data_directory",
+                                        "--style=tsv", "--nohead"]).decode('utf-8').splitlines()
 
-verify_bamid('VerifyBamId.selfSM')
-insert_size_metrics('InsertSizeMetrics.txt')
-flagstat_out('flagstat.out')
-perc_dup = mark_dups_metrics('mark_dups_metrics.txt')
-gcbias_metrics_summary('GcBiasMetricsSummary.txt')
-pfalgnbases = alignment_summary_metrics('AlignmentSummaryMetrics.txt')
-genome_terr = wgs_metrics('WgsMetrics.txt')
+#header for outfile
+metrics_header = ['last_succeeded_build', 'name', 'status', 'data_directory', 'properly_paired-rate', 'PF_READS', 'FREEMIX', 'discordant_rate', 'FOP: PF_MISMATCH_RATE',
+                  'GENOME_TERRITORY', 'mapped_rate', 'SD_COVERAGE', 'HAPLOID COVERAGE', 'TOTAL_READS',
+                  'PF_READS_ALIGNED', 'SEQ_ID', 'HET_SNP_SENSITIVITY', 'MEDIAN_INSERT_SIZE', 'PCT_20X',
+                  'PF_ALIGNED_BASES', 'PCT_30X', 'PERCENT_DUPLICATION', 'PCT_ADAPTER', 'ALIGNED_READS', 'PCT_10X',
+                  'STANDARD_DEVIATION', 'MEAN_COVERAGE', 'PF_HQ_ALIGNED_Q20_BASE', 'SOP: PF_MISMATCH_RATE', 'HET_SNP_Q']
 
-haploid_coverage = pfalgnbases * ((1 - perc_dup)/genome_terr)
-results['HAPLOID COVERAGE'] = haploid_coverage
+#outfile
+cwd_metrics_outfile = woid + '.cwl.metrics.' + mm_dd_yy + '.tsv'
+
+# call methods to generate results
+with open(cwd_metrics_outfile, 'w') as outfilecsv:
+
+    metrics_writer = csv.DictWriter(outfilecsv, fieldnames=metrics_header, delimiter='\t')
+    metrics_writer.writeheader()
+
+    for line in model_groups:
+
+        info = line.split('\t')
+
+        if 'Succeeded' in info[2]:
+            results['last_succeeded_build'] = info[0]
+            results['name'] = info[1]
+            results['status'] = info[2]
+            results['data_directory'] = info[3]
+
+            os.chdir(info[3] + '/results')
+
+            verify_bamid('VerifyBamId.selfSM')
+            insert_size_metrics('InsertSizeMetrics.txt')
+            flagstat_out('flagstat.out')
+            perc_dup = mark_dups_metrics('mark_dups_metrics.txt')
+            gcbias_metrics_summary('GcBiasMetricsSummary.txt')
+            pfalgnbases = alignment_summary_metrics('AlignmentSummaryMetrics.txt')
+            genome_terr = wgs_metrics('WgsMetrics.txt')
+
+            haploid_coverage = pfalgnbases * ((1 - perc_dup)/genome_terr)
+            results['HAPLOID COVERAGE'] = haploid_coverage
+
+            os.chdir(working_dir)
+
+            metrics_writer.writerow(results)
+
+        else:
+
+            print('{} {} Build Failed'.format(info[0], info[1]))
