@@ -44,9 +44,9 @@ def insert_size_metrics(infile):
     with open(infile, 'r') as infilecsv:
         infile_reader = csv.reader(infilecsv, delimiter='\t')
         for line in infile_reader:
-            if 'MEDIAN_INSERT_SIZE' in line:
+            if 'MEAN_INSERT_SIZE' in line:
                 data = (next(infile_reader))
-                results['MEDIAN_INSERT_SIZE'] = data[4]
+                results['MEAN_INSERT_SIZE'] = data[4]
                 results['STANDARD_DEVIATION'] = data[5]
 
     return results
@@ -54,15 +54,21 @@ def insert_size_metrics(infile):
 
 def flagstat_out(infile):
     with open(infile, 'r') as infilecsv:
+
         infile_reader = csv.reader(infilecsv)
+
         mapped_rate = float()
+        mapped_int = float()
         properly_paired_rate = float()
+        wmmtadc = float()
+
         for line in infile_reader:
 
-            if 'mapped' in line[0] and '%' in line[0]:
+            if 'mapped' in line[0] and '% : N/A' in line[0]:
                 mapped_line = line[0]
                 mapped_split = mapped_line.split('(')
                 mapped_rate = float(mapped_split[1].split(':')[0].strip()[:-1])
+                mapped_int = float(mapped_split[0].split('+')[0].strip())
                 results['mapped_rate'] = mapped_rate
 
             if 'properly paired' in line[0]:
@@ -71,8 +77,15 @@ def flagstat_out(infile):
                 properly_paired_rate = float(properly_paired_split[1].split(':')[0].strip()[:-1])
                 results['properly_paired-rate'] = properly_paired_rate
 
-            discordant_rate = mapped_rate - properly_paired_rate
-            results['discordant_rate'] = discordant_rate
+            if 'with mate mapped to a different chr' in line[0] and 'mapQ>=' not in line[0]:
+                wmmtadc_line = line[0]
+                wmmtadc = float(wmmtadc_line.split('+')[0].strip())
+
+        discordant_rate = mapped_rate - properly_paired_rate
+        results['discordant_rate'] = discordant_rate
+
+        inter_chromosomal_pairing_rate = wmmtadc / mapped_int
+        results['inter-chromosomal_Pairing rate'] = inter_chromosomal_pairing_rate
 
     return results
 
@@ -147,18 +160,25 @@ model_groups = subprocess.check_output(['genome', 'model', 'list', model_groups_
                                         "last_succeeded_build.id,name,status,last_succeeded_build.data_directory,"
                                         "subject.name", "--style=tsv", "--nohead"]).decode('utf-8').splitlines()
 
-# header for outfile
-metrics_header = ['QC_date','WOID', 'last_succeeded_build','sample', 'model_name', 'status', 'data_directory', 'cram_file',
-                  'properly_paired-rate','PF_READS', 'FREEMIX', 'discordant_rate', 'FOP: PF_MISMATCH_RATE',
-                  'GENOME_TERRITORY', 'mapped_rate', 'SD_COVERAGE', 'HAPLOID COVERAGE', 'TOTAL_READS',
-                  'PF_READS_ALIGNED', 'SEQ_ID', 'HET_SNP_SENSITIVITY', 'MEDIAN_INSERT_SIZE', 'PCT_20X',
-                  'PF_ALIGNED_BASES', 'PCT_30X', 'PERCENT_DUPLICATION', 'PCT_ADAPTER', 'ALIGNED_READS', 'PCT_10X',
-                  'STANDARD_DEVIATION', 'MEAN_COVERAGE', 'PF_HQ_ALIGNED_Q20_BASE', 'SOP: PF_MISMATCH_RATE', 'HET_SNP_Q']
 
-# outfile
+metrics_header = ['Admin', 'WorkOrder','date_QC','sample_name','model_name','last_succeeded_build','data_directory',
+                  'cram_file','status', 'ALIGNED_READS','mapped_rate','FOP: PF_MISMATCH_RATE','SOP: PF_MISMATCH_RATE',
+                  'FREEMIX','HAPLOID COVERAGE','PCT_10X', 'PCT_20X','PCT_30X','discordant_rate',
+                  'inter-chromosomal_Pairing rate','HET_SNP_Q','HET_SNP_SENSITIVITY', 'HET_SNP_SENSITIVITY',
+                  'MEAN_COVERAGE','SD_COVERAGE','MEAN_INSERT_SIZE','STANDARD_DEVIATION','PCT_ADAPTER','PF_READS',
+                  'PF_ALIGNED_BASES','PERCENT_DUPLICATION','TOTAL_READS','properly_paired-rate',
+                  'PF_HQ_ALIGNED_Q20_BASE','PF_READS_ALIGNED','GENOME_TERRITORY','SEQ_ID']
 
 for woid in woid_list:
     cwd_metrics_outfile = woid + '.cwl.metrics.' + mm_dd_yy + '.tsv'
+
+    #Admin name
+    admin_collections = subprocess.check_output(["wo_info", "--report", "billing", "--woid", woid]).decode(
+        'utf-8').splitlines()
+    for ap in admin_collections:
+        if 'Administration Project' in ap:
+            ap_new = ap.split(':')[1].strip()
+            results['Admin'] = ap_new
 
     # call methods to generate results
     with open(cwd_metrics_outfile, 'w') as outfilecsv:
@@ -172,13 +192,13 @@ for woid in woid_list:
 
             if 'Succeeded' in info[2]:
 
-                results['WOID'] = woid
-                results['QC_date'] = mm_dd_yy
+                results['WorkOrder'] = woid
+                results['date_QC'] = mm_dd_yy
                 results['last_succeeded_build'] = info[0]
                 results['model_name'] = info[1]
                 results['status'] = info[2]
                 results['data_directory'] = info[3]
-                results['sample'] = info[4]
+                results['sample_name'] = info[4]
 
                 os.chdir(info[3] + '/results')
 
