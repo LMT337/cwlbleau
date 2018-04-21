@@ -141,12 +141,12 @@ model_groups = subprocess.check_output(['genome', 'model', 'list', model_groups_
                                         "--style=tsv", "--nohead"]).decode('utf-8').splitlines()
 
 # header for outfile
-metrics_header = ['WOID', 'last_succeeded_build', 'name', 'status', 'data_directory', 'properly_paired-rate','PF_READS',
-                  'FREEMIX', 'discordant_rate', 'FOP: PF_MISMATCH_RATE', 'GENOME_TERRITORY', 'mapped_rate',
-                  'SD_COVERAGE', 'HAPLOID COVERAGE', 'TOTAL_READS', 'PF_READS_ALIGNED', 'SEQ_ID', 'HET_SNP_SENSITIVITY',
-                  'MEDIAN_INSERT_SIZE', 'PCT_20X', 'PF_ALIGNED_BASES', 'PCT_30X', 'PERCENT_DUPLICATION', 'PCT_ADAPTER',
-                  'ALIGNED_READS', 'PCT_10X', 'STANDARD_DEVIATION', 'MEAN_COVERAGE', 'PF_HQ_ALIGNED_Q20_BASE',
-                  'SOP: PF_MISMATCH_RATE', 'HET_SNP_Q']
+metrics_header = ['WOID', 'last_succeeded_build', 'name', 'status', 'data_directory', 'cram_file',
+                  'properly_paired-rate','PF_READS', 'FREEMIX', 'discordant_rate', 'FOP: PF_MISMATCH_RATE',
+                  'GENOME_TERRITORY', 'mapped_rate', 'SD_COVERAGE', 'HAPLOID COVERAGE', 'TOTAL_READS',
+                  'PF_READS_ALIGNED', 'SEQ_ID', 'HET_SNP_SENSITIVITY', 'MEDIAN_INSERT_SIZE', 'PCT_20X',
+                  'PF_ALIGNED_BASES', 'PCT_30X', 'PERCENT_DUPLICATION', 'PCT_ADAPTER', 'ALIGNED_READS', 'PCT_10X',
+                  'STANDARD_DEVIATION', 'MEAN_COVERAGE', 'PF_HQ_ALIGNED_Q20_BASE', 'SOP: PF_MISMATCH_RATE', 'HET_SNP_Q']
 
 # outfile
 cwd_metrics_outfile = woid + '.cwl.metrics.' + mm_dd_yy + '.tsv'
@@ -162,12 +162,17 @@ with open(cwd_metrics_outfile, 'w') as outfilecsv:
         info = line.split('\t')
 
         if 'Succeeded' in info[2]:
+
             results['last_succeeded_build'] = info[0]
             results['name'] = info[1]
             results['status'] = info[2]
             results['data_directory'] = info[3]
 
             os.chdir(info[3] + '/results')
+
+            results['cram_file'] = 'NA'
+            if os.path.isfile('final.cram'):
+                results['cram_file'] = os.getcwd() + '/final.cram'
 
             verify_bamid('VerifyBamId.selfSM')
             insert_size_metrics('InsertSizeMetrics.txt')
