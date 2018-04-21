@@ -6,20 +6,27 @@ desc_str = """
     """
 parser = argparse.ArgumentParser(description=desc_str)
 parser.add_argument("-w", type=str, help='woid')
+parser.add_argument("-f", type=str, help='file of woid\'s (without header)')
 args = parser.parse_args()
 
+woid_list = []
 # assign woid
-if not args.w:
-    print('usage:\n~awagner/bin/python3 cwlbleau.py -w <woid>')
+if not args.w and not args.f:
+    print('usage:\n~awagner/bin/python3 cwlbleau.py -w <woid>\n~awagner/bin/python3 cwlbleau.py -f <file of woids>')
     quit()
-else:
+elif args.w:
     woid = args.w
+    woid_list.append(woid)
     model_groups_id = 'model_groups.project.id=' + woid
+elif args.f:
+    with open(args.f, 'r') as infilecsv:
+        infile_reader = csv.reader(infilecsv)
+        for line in infile_reader:
+            woid_list.append(line[0])
 
 # set working dir, results dic, date
 working_dir = os.getcwd()
 results = {}
-results['WOID'] = woid
 mm_dd_yy = datetime.datetime.now().strftime("%m%d%y")
 
 # Fucntions pull metrics from last succeeded build dir
@@ -137,11 +144,11 @@ def wgs_metrics(infile):
 
 # run genome model command to generate model info
 model_groups = subprocess.check_output(['genome', 'model', 'list', model_groups_id, "--show",
-                                        "last_succeeded_build.id,name,status,last_succeeded_build.data_directory",
-                                        "--style=tsv", "--nohead"]).decode('utf-8').splitlines()
+                                        "last_succeeded_build.id,name,status,last_succeeded_build.data_directory,"
+                                        "subject.name", "--style=tsv", "--nohead"]).decode('utf-8').splitlines()
 
 # header for outfile
-metrics_header = ['WOID', 'last_succeeded_build', 'name', 'status', 'data_directory', 'cram_file',
+metrics_header = ['QC_date','WOID', 'last_succeeded_build','sample', 'model_name', 'status', 'data_directory', 'cram_file',
                   'properly_paired-rate','PF_READS', 'FREEMIX', 'discordant_rate', 'FOP: PF_MISMATCH_RATE',
                   'GENOME_TERRITORY', 'mapped_rate', 'SD_COVERAGE', 'HAPLOID COVERAGE', 'TOTAL_READS',
                   'PF_READS_ALIGNED', 'SEQ_ID', 'HET_SNP_SENSITIVITY', 'MEDIAN_INSERT_SIZE', 'PCT_20X',
@@ -149,46 +156,51 @@ metrics_header = ['WOID', 'last_succeeded_build', 'name', 'status', 'data_direct
                   'STANDARD_DEVIATION', 'MEAN_COVERAGE', 'PF_HQ_ALIGNED_Q20_BASE', 'SOP: PF_MISMATCH_RATE', 'HET_SNP_Q']
 
 # outfile
-cwd_metrics_outfile = woid + '.cwl.metrics.' + mm_dd_yy + '.tsv'
 
-# call methods to generate results
-with open(cwd_metrics_outfile, 'w') as outfilecsv:
+for woid in woid_list:
+    cwd_metrics_outfile = woid + '.cwl.metrics.' + mm_dd_yy + '.tsv'
 
-    metrics_writer = csv.DictWriter(outfilecsv, fieldnames=metrics_header, delimiter='\t')
-    metrics_writer.writeheader()
+    # call methods to generate results
+    with open(cwd_metrics_outfile, 'w') as outfilecsv:
 
-    for line in model_groups:
+        metrics_writer = csv.DictWriter(outfilecsv, fieldnames=metrics_header, delimiter='\t')
+        metrics_writer.writeheader()
 
-        info = line.split('\t')
+        for line in model_groups:
 
-        if 'Succeeded' in info[2]:
+            info = line.split('\t')
 
-            results['last_succeeded_build'] = info[0]
-            results['name'] = info[1]
-            results['status'] = info[2]
-            results['data_directory'] = info[3]
+            if 'Succeeded' in info[2]:
 
-            os.chdir(info[3] + '/results')
+                results['WOID'] = woid
+                results['QC_date'] = mm_dd_yy
+                results['last_succeeded_build'] = info[0]
+                results['model_name'] = info[1]
+                results['status'] = info[2]
+                results['data_directory'] = info[3]
+                results['sample'] = info[4]
 
-            results['cram_file'] = 'NA'
-            if os.path.isfile('final.cram'):
-                results['cram_file'] = os.getcwd() + '/final.cram'
+                os.chdir(info[3] + '/results')
 
-            verify_bamid('VerifyBamId.selfSM')
-            insert_size_metrics('InsertSizeMetrics.txt')
-            flagstat_out('flagstat.out')
-            perc_dup = mark_dups_metrics('mark_dups_metrics.txt')
-            gcbias_metrics_summary('GcBiasMetricsSummary.txt')
-            pfalgnbases = alignment_summary_metrics('AlignmentSummaryMetrics.txt')
-            genome_terr = wgs_metrics('WgsMetrics.txt')
+                results['cram_file'] = 'NA'
+                if os.path.isfile('final.cram'):
+                    results['cram_file'] = os.getcwd() + '/final.cram'
 
-            haploid_coverage = pfalgnbases * ((1 - perc_dup)/genome_terr)
-            results['HAPLOID COVERAGE'] = haploid_coverage
+                verify_bamid('VerifyBamId.selfSM')
+                insert_size_metrics('InsertSizeMetrics.txt')
+                flagstat_out('flagstat.out')
+                perc_dup = mark_dups_metrics('mark_dups_metrics.txt')
+                gcbias_metrics_summary('GcBiasMetricsSummary.txt')
+                pfalgnbases = alignment_summary_metrics('AlignmentSummaryMetrics.txt')
+                genome_terr = wgs_metrics('WgsMetrics.txt')
 
-            os.chdir(working_dir)
+                haploid_coverage = pfalgnbases * ((1 - perc_dup)/genome_terr)
+                results['HAPLOID COVERAGE'] = haploid_coverage
 
-            metrics_writer.writerow(results)
+                os.chdir(working_dir)
 
-        else:
+                metrics_writer.writerow(results)
 
-            print('{} {} Build Failed'.format(info[0], info[1]))
+            else:
+
+                print('{} {} Build Failed'.format(info[0], info[1]))
