@@ -28,6 +28,8 @@ elif args.f:
 working_dir = os.getcwd()
 results = {}
 mm_dd_yy = datetime.datetime.now().strftime("%m%d%y")
+mmddyy_slash = datetime.datetime.now().strftime("%m/%d/%y")
+
 
 # Fucntions pull metrics from last succeeded build dir
 def verify_bamid(infile):
@@ -193,7 +195,7 @@ for woid in woid_list:
             if 'Succeeded' in info[2]:
 
                 results['WorkOrder'] = woid
-                results['date_QC'] = mm_dd_yy
+                results['date_QC'] = mmddyy_slash
                 results['last_succeeded_build'] = info[0]
                 results['model_name'] = info[1]
                 results['status'] = info[2]
