@@ -17,7 +17,6 @@ if not args.w and not args.f:
 elif args.w:
     woid = args.w
     woid_list.append(woid)
-    model_groups_id = 'model_groups.project.id=' + woid
 elif args.f:
     with open(args.f, 'r') as infilecsv:
         infile_reader = csv.reader(infilecsv)
@@ -38,7 +37,6 @@ def verify_bamid(infile):
         for line in infile_reader:
             results['SEQ_ID'] = line['#SEQ_ID']
             results['FREEMIX'] = line['FREEMIX']
-
     return results
 
 
@@ -50,7 +48,6 @@ def insert_size_metrics(infile):
                 data = (next(infile_reader))
                 results['MEAN_INSERT_SIZE'] = data[4]
                 results['STANDARD_DEVIATION'] = data[5]
-
     return results
 
 
@@ -101,7 +98,6 @@ def mark_dups_metrics(infile):
                 data = next(infile_reader)
                 percent_duplication = float(data[8])
                 results['PERCENT_DUPLICATION'] = data[8]
-
     return percent_duplication
 
 
@@ -112,7 +108,6 @@ def gcbias_metrics_summary(infile):
             if 'ALIGNED_READS' in line:
                 data = next(infile_reader)
                 results['ALIGNED_READS'] = data[4]
-
     return results
 
 
@@ -133,7 +128,6 @@ def alignment_summary_metrics(infile):
                 results['PF_ALIGNED_BASES'] = line[7]
                 results['PF_HQ_ALIGNED_Q20_BASE'] = line[10]
                 results['PCT_ADAPTER'] = line[23]
-
     return pf_aligned_bases
 
 
@@ -153,14 +147,7 @@ def wgs_metrics(infile):
                 results['PCT_30X'] = data[18]
                 results['HET_SNP_SENSITIVITY'] = data[26]
                 results['HET_SNP_Q'] = data[27]
-
     return genome_territory
-
-
-# run genome model command to generate model info
-model_groups = subprocess.check_output(['genome', 'model', 'list', model_groups_id, "--show",
-                                        "last_succeeded_build.id,name,status,last_succeeded_build.data_directory,"
-                                        "subject.name", "--style=tsv", "--nohead"]).decode('utf-8').splitlines()
 
 
 metrics_header = ['Admin', 'WorkOrder','date_QC','sample_name','model_name','last_succeeded_build','data_directory',
@@ -172,9 +159,18 @@ metrics_header = ['Admin', 'WorkOrder','date_QC','sample_name','model_name','las
                   'PF_HQ_ALIGNED_Q20_BASE','PF_READS_ALIGNED','GENOME_TERRITORY','SEQ_ID']
 
 for woid in woid_list:
+
+    print('cwlbleau\'ing: {}'.format(woid))
+    model_groups_id = 'model_groups.project.id=' + woid
+
+    # run genome model command to generate model info
+    model_groups = subprocess.check_output(['genome', 'model', 'list', model_groups_id, "--show",
+                                            "last_succeeded_build.id,name,status,last_succeeded_build.data_directory,"
+                                            "subject.name", "--style=tsv", "--nohead"]).decode('utf-8').splitlines()
+
     cwd_metrics_outfile = woid + '.cwl.metrics.' + mm_dd_yy + '.tsv'
 
-    #Admin name
+    # Admin name
     admin_collections = subprocess.check_output(["wo_info", "--report", "billing", "--woid", woid]).decode(
         'utf-8').splitlines()
     for ap in admin_collections:
@@ -208,16 +204,66 @@ for woid in woid_list:
                 if os.path.isfile('final.cram'):
                     results['cram_file'] = os.getcwd() + '/final.cram'
 
-                verify_bamid('VerifyBamId.selfSM')
-                insert_size_metrics('InsertSizeMetrics.txt')
-                flagstat_out('flagstat.out')
-                perc_dup = mark_dups_metrics('mark_dups_metrics.txt')
-                gcbias_metrics_summary('GcBiasMetricsSummary.txt')
-                pfalgnbases = alignment_summary_metrics('AlignmentSummaryMetrics.txt')
-                genome_terr = wgs_metrics('WgsMetrics.txt')
+                if os.path.isfile('VerifyBamId.selfSM'):
+                    verify_bamid('VerifyBamId.selfSM')
+                else:
+                    results['SEQ_ID'] = 'FNF'
+                    results['FREEMIX'] = 'FNF'
 
-                haploid_coverage = pfalgnbases * ((1 - perc_dup)/genome_terr)
-                results['HAPLOID COVERAGE'] = haploid_coverage
+                if os.path.isfile('InsertSizeMetrics.txt'):
+                    insert_size_metrics('InsertSizeMetrics.txt')
+                else:
+                    results['MEAN_INSERT_SIZE'] = 'FNF'
+                    results['STANDARD_DEVIATION'] = 'FNF'
+
+                if os.path.isfile('flagstat.out'):
+                    flagstat_out('flagstat.out')
+                else:
+                    results['mapped_rate'] = 'FNF'
+                    results['properly_paired-rate'] = 'FNF'
+                    results['discordant_rate'] = 'FNF'
+                    results['inter-chromosomal_Pairing rate'] = 'FNF'
+
+                if os.path.isfile('mark_dups_metrics.txt'):
+                    perc_dup = mark_dups_metrics('mark_dups_metrics.txt')
+                else:
+                    results['PERCENT_DUPLICATION'] = 'FNF'
+                    perc_dup = False
+
+                if os.path.isfile('GcBiasMetricsSummary.txt'):
+                    gcbias_metrics_summary('GcBiasMetricsSummary.txt')
+                else:
+                    results['ALIGNED_READS'] = 'FNF'
+
+                if os.path.isfile('AlignmentSummaryMetrics.txt'):
+                    pfalgnbases = alignment_summary_metrics('AlignmentSummaryMetrics.txt')
+                else:
+                    results['TOTAL_READS'] = 'FNF'
+                    results['PF_READS'] = 'FNF'
+                    results['PF_READS_ALIGNED'] = 'FNF'
+                    results['PF_ALIGNED_BASES'] = 'FNF'
+                    results['PF_HQ_ALIGNED_Q20_BASE'] = 'FNF'
+                    results['PCT_ADAPTER'] = 'FNF'
+                    pfalgnbases = False
+
+                if os.path.isfile('WgsMetrics.txt'):
+                    genome_terr = wgs_metrics('WgsMetrics.txt')
+                else:
+                    results['GENOME_TERRITORY'] = 'FNF'
+                    results['MEAN_COVERAGE'] = 'FNF'
+                    results['SD_COVERAGE'] = 'FNF'
+                    results['PCT_10X'] = 'FNF'
+                    results['PCT_20X'] = 'FNF'
+                    results['PCT_30X'] = 'FNF'
+                    results['HET_SNP_SENSITIVITY'] = 'FNF'
+                    results['HET_SNP_Q'] = 'FNF'
+                    genome_terr = False
+
+                if pfalgnbases and perc_dup and genome_terr:
+                    haploid_coverage = pfalgnbases * ((1 - perc_dup)/genome_terr)
+                    results['HAPLOID COVERAGE'] = haploid_coverage
+                else:
+                    results['HAPLOID COVERAGE'] = 'FNF'
 
                 os.chdir(working_dir)
 
