@@ -45,8 +45,8 @@ def insert_size_metrics(infile):
         for line in infile_reader:
             if 'MEAN_INSERT_SIZE' in line:
                 data = (next(infile_reader))
-                results['MEAN_INSERT_SIZE'] = data[4]
-                results['STANDARD_DEVIATION'] = data[5]
+                results['MEAN_INSERT_SIZE'] = data[5]
+                results['STANDARD_DEVIATION'] = data[6]
     return results
 
 
@@ -169,7 +169,7 @@ def write_results(results_dict, outfile, header_list):
             metrics_writer = csv.DictWriter(outfilecsv, fieldnames=header_list, delimiter='\t')
             metrics_writer.writeheader()
             metrics_writer.writerow(results_dict)
-    if os.path.isfile(outfile):
+    elif os.path.isfile(outfile):
         with open(cwd_metrics_outfile, 'a') as outfilecsv:
             metrics_writer = csv.DictWriter(outfilecsv, fieldnames=header_list, delimiter='\t')
             metrics_writer.writerow(results_dict)
@@ -179,7 +179,7 @@ def write_results(results_dict, outfile, header_list):
 met_wgs_header = ['Admin', 'WorkOrder','date_QC','sample_name','model_name','last_succeeded_build','data_directory',
                   'cram_file','status', 'ALIGNED_READS','mapped_rate','FOP: PF_MISMATCH_RATE','SOP: PF_MISMATCH_RATE',
                   'FREEMIX','HAPLOID COVERAGE','PCT_10X', 'PCT_20X','PCT_30X','discordant_rate',
-                  'inter-chromosomal_Pairing rate','HET_SNP_Q','HET_SNP_SENSITIVITY', 'HET_SNP_SENSITIVITY',
+                  'inter-chromosomal_Pairing rate','HET_SNP_Q','HET_SNP_SENSITIVITY',
                   'MEAN_COVERAGE','SD_COVERAGE','MEAN_INSERT_SIZE','STANDARD_DEVIATION','PCT_ADAPTER','PF_READS',
                   'PF_ALIGNED_BASES','PERCENT_DUPLICATION','TOTAL_READS','properly_paired-rate',
                   'PF_HQ_ALIGNED_Q20_BASE','PF_READS_ALIGNED','GENOME_TERRITORY','SEQ_ID']
@@ -187,7 +187,6 @@ met_wgs_header = ['Admin', 'WorkOrder','date_QC','sample_name','model_name','las
 
 for woid in woid_list:
 
-    results = {}
 
     print('cwlbleau\'ing: {}'.format(woid))
     model_groups_id = 'model_groups.project.id=' + woid
@@ -208,15 +207,18 @@ for woid in woid_list:
     for ap in admin_collections:
         if 'Administration Project' in ap:
             ap_new = ap.split(':')[1].strip()
-            results['Admin'] = ap_new
 
     # call methods to generate results
     for line in model_groups:
+
+        results = {}
 
         info = line.split('\t')
 
         if 'Succeeded' in info[2]:
 
+            results.clear()
+            results['Admin'] = ap_new
             results['WorkOrder'] = woid
             results['date_QC'] = mmddyy_slash
             results['last_succeeded_build'] = info[0]
