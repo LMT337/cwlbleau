@@ -1,27 +1,38 @@
 import os, csv, subprocess, datetime, argparse
 
-# argument input woid
+# argument input
 desc_str = """
         Program to parse cwl metrics.
     """
 parser = argparse.ArgumentParser(description=desc_str)
 parser.add_argument("-w", type=str, help='woid')
-parser.add_argument("-f", type=str, help='file of woid\'s (without header)')
+parser.add_argument("-fw", type=str, help='file of woid\'s (without header)')
+parser.add_argument("-a", type=str, help='anp')
+parser.add_argument("-fa", type=str, help='file of AnP\'s (without header)')
 args = parser.parse_args()
 
-woid_list = []
+id_list = []
+
 # assign woid
-if not args.w and not args.f:
+if not args.w and not args.a and not args.fw and not args.fa:
     print('usage:\n~awagner/bin/python3 cwlbleau.py -w <woid>\n~awagner/bin/python3 cwlbleau.py -f <file of woids>')
     quit()
 elif args.w:
-    woid = args.w
-    woid_list.append(woid)
-elif args.f:
-    with open(args.f, 'r') as infilecsv:
-        infile_reader = csv.reader(infilecsv)
-        for line in infile_reader:
-            woid_list.append(line[0])
+    anp_or_woid = "WorkOrder"
+    id_list.append(args.w)
+elif args.a:
+    anp_or_woid = "AnP"
+    id_list.append(args.a)
+elif args.fw:
+    anp_or_woid = "WorkOrder"
+    with open(args.fw, 'r') as infilecsv:
+        for line in infilecsv:
+            id_list.append(line.rstrip())
+elif args.fa:
+    anp_or_woid = "AnP"
+    with open(args.fa) as infilecsv:
+        for line in infilecsv:
+            id_list.append(line.rstrip())
 
 # set working dir, results dic, date
 working_dir = os.getcwd()
@@ -160,7 +171,7 @@ def hs_metrics(infile):
                 hs_metrics_dict = dict(zip(hs_metrics_header, hs_metrics_data_two))
         for metric in hs_metrics_dict:
             results[metric] = hs_metrics_dict[metric]
-    return
+    return hs_metrics_header
 
 
 def write_results(results_dict, outfile, header_list):
@@ -183,30 +194,42 @@ met_wgs_header = ['Admin', 'WorkOrder','date_QC','sample_name','model_name','las
                   'MEAN_COVERAGE','SD_COVERAGE','MEAN_INSERT_SIZE','STANDARD_DEVIATION','PCT_ADAPTER','PF_READS',
                   'PF_ALIGNED_BASES','PERCENT_DUPLICATION','TOTAL_READS','properly_paired-rate',
                   'PF_HQ_ALIGNED_Q20_BASE','PF_READS_ALIGNED','GENOME_TERRITORY','SEQ_ID']
+met_wgs_header[1] = anp_or_woid
 
 
-for woid in woid_list:
+for id in id_list:
 
+    if args.w or args.fw:
+        print('cwlbleau\'ing: {}'.format(id))
+        model_groups_id = 'model_groups.project.id=' + id
 
-    print('cwlbleau\'ing: {}'.format(woid))
-    model_groups_id = 'model_groups.project.id=' + woid
+        # run genome model command to generate model info
+        model_groups = subprocess.check_output(['genome', 'model', 'list', model_groups_id, "--show",
+                                                "last_succeeded_build.id,name,status,last_succeeded_build.data_directory,"
+                                                "subject.name", "--style=tsv", "--nohead"]).decode('utf-8').splitlines()
 
-    # run genome model command to generate model info
-    model_groups = subprocess.check_output(['genome', 'model', 'list', model_groups_id, "--show",
-                                            "last_succeeded_build.id,name,status,last_succeeded_build.data_directory,"
-                                            "subject.name", "--style=tsv", "--nohead"]).decode('utf-8').splitlines()
+    if args.a or args.fa:
+        print('cwlbleau\'ing: {}'.format(id))
+        model_groups_id = 'analysis_project.id=' + id
 
-    cwd_metrics_outfile = woid + '.cwl.metrics.' + mm_dd_yy + '.tsv'
+        # run genome model command to generate model info
+        model_groups = subprocess.check_output(['genome', 'model', 'list', model_groups_id, "--show",
+                                                "last_succeeded_build.id,name,status,last_succeeded_build.data_directory,"
+                                                "subject.name", "--style=tsv", "--nohead"]).decode('utf-8').splitlines()
+
+    cwd_metrics_outfile = id + '.cwl.metrics.' + mm_dd_yy + '.tsv'
     print('Metrics outfile: {}'.format(cwd_metrics_outfile))
     if os.path.isfile(cwd_metrics_outfile):
         os.remove(cwd_metrics_outfile)
 
     # Admin name
-    admin_collections = subprocess.check_output(["wo_info", "--report", "billing", "--woid", woid]).decode(
-        'utf-8').splitlines()
-    for ap in admin_collections:
-        if 'Administration Project' in ap:
-            ap_new = ap.split(':')[1].strip()
+    ap_new = "NA"
+    if args.w or args.fw:
+        admin_collections = subprocess.check_output(["wo_info", "--report", "billing", "--woid", id]).decode(
+            'utf-8').splitlines()
+        for ap in admin_collections:
+            if 'Administration Project' in ap:
+                ap_new = ap.split(':')[1].strip()
 
     # call methods to generate results
     for line in model_groups:
@@ -219,7 +242,7 @@ for woid in woid_list:
 
             results.clear()
             results['Admin'] = ap_new
-            results['WorkOrder'] = woid
+            results[anp_or_woid] = id
             results['date_QC'] = mmddyy_slash
             results['last_succeeded_build'] = info[0]
             results['model_name'] = info[1]
@@ -295,9 +318,10 @@ for woid in woid_list:
                 results['HAPLOID COVERAGE'] = 'FNF'
 
             if os.path.isfile('HsMetrics.txt'):
-                hs_metrics('HsMetrics.txt')
-                metrics_header = list(results.keys())
-                metrics_header.sort()
+                header_add_fields = hs_metrics('HsMetrics.txt')
+                metrics_header = met_wgs_header + header_add_fields
+                # metrics_header = list(results.keys())
+                # metrics_header.sort()
             else:
                 metrics_header = met_wgs_header
 
